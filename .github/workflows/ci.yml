@@ -1,0 +1,48 @@
+name: CI
+
+# Быстрый пайплайн на каждое изменение. Сюда попадает только то, что не
+# зависит от внешних систем: линт, типы, unit и API-тесты против локального
+# мок-сервера. E2E ходят на общий стенд aiqa.su, который я не контролирую, и
+# его недоступность не должна красить основную ветку — они живут в e2e.yml.
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  checks:
+    name: Линт, типы и герметичные тесты
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      # npm ci ставит точные версии из lock-файла и падает, если он разошёлся
+      # с package.json — на CI это нужнее, чем npm install.
+      - name: Установка зависимостей
+        run: npm ci
+
+      - name: Линт
+        run: npm run lint
+
+      # tsc отдельным шагом: линтер не проверяет типы, а ошибка типа ломает
+      # тест так же, как ошибка логики.
+      - name: Проверка типов
+        run: npx tsc --noEmit
+
+      - name: Unit-тесты
+        run: npm run test:unit
+
+      - name: API-тесты
+        run: npm run test:api
