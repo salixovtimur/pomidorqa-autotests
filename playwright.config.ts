@@ -27,6 +27,8 @@ export default defineConfig({
         ...devices["Desktop Chrome"],
         timezoneId: "Europe/Moscow",
         locale: "ru-RU",
+        actionTimeout: 15_000,
+        navigationTimeout: 30_000,
         baseURL: process.env.POMIDORQA_BASE_URL ?? "https://aiqa.su",
         trace: "retain-on-failure",
         screenshot: "only-on-failure",
