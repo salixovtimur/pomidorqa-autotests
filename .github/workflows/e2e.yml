@@ -1,9 +1,5 @@
 name: E2E
 
-# E2E отделены от основного пайплайна намеренно. Они идут на общий живой
-# стенд aiqa.su: там одновременно работают другие люди, стенд бывает медленным
-# и недоступным. Красная основная ветка из-за чужого сервера ничего не говорит
-# о качестве кода, поэтому e2e гоняются по расписанию и по кнопке.
 on:
   workflow_dispatch:
     inputs:
@@ -12,7 +8,6 @@ on:
         required: false
         default: "1"
   schedule:
-    # Каждый день в 06:00 UTC — до начала рабочего дня, когда на стенде тихо.
     - cron: "0 6 * * *"
 
 permissions:
@@ -35,21 +30,25 @@ jobs:
       - name: Установка зависимостей
         run: npm ci
 
-      # Ставим только Chromium: остальные движки в этом проекте не нужны,
-      # а скачивание всех трёх удлиняет прогон втрое.
       - name: Установка Chromium
         run: npx playwright install --with-deps chromium
 
       - name: Прогон E2E
         run: npx playwright test --project=e2e --repeat-each=${{ inputs.repeat || 1 }}
         env:
-          # Включает в playwright.config.ts один worker и повтор падения:
-          # общий стенд не любит параллельную нагрузку.
           CI: true
 
+      - name: Метрики прогона в сводку
+        if: ${{ !cancelled() }}
+        run: |
+          {
+            echo '### Метрики прогона E2E'
+            echo '```'
+            npm run metrics --silent || true
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
       - name: Отчёт
-        # Отчёт нужен именно когда упало, поэтому выгружаем при любом исходе,
-        # кроме отменённого прогона.
         if: ${{ !cancelled() }}
         uses: actions/upload-artifact@v4
         with:

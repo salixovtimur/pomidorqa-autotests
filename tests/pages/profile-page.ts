@@ -1,6 +1,8 @@
 import { type Locator, type Page } from "@playwright/test";
 import { ROUTES } from "../helpers/user";
 
+export type SkillType = "can_help" | "want_to_learn";
+
 export class ProfilePage {
   readonly nameInput: Locator;
   readonly telegramInput: Locator;
@@ -30,6 +32,18 @@ export class ProfilePage {
     return this.page.locator(`[data-skill-tag="${tag}"]`);
   }
 
+  skillsSection(type: SkillType): Locator {
+    return this.page.locator(`[data-skills="${type}"]`);
+  }
+
+  skillChipIn(type: SkillType, tag: string): Locator {
+    return this.skillsSection(type).locator(`[data-skill-tag="${tag}"]`);
+  }
+
+  skillRemoveButton(tag: string): Locator {
+    return this.page.getByRole("button", { name: `Убрать ${tag}` });
+  }
+
   async open() {
     await this.page.goto(ROUTES.profile);
   }
@@ -38,26 +52,49 @@ export class ProfilePage {
     await this.page.reload();
   }
 
-  async save() {
-    const saved = this.page.waitForResponse(
-      (response) =>
-        response.url().endsWith(ROUTES.profile) && response.request().method() === "POST"
+  async isNameValid(): Promise<boolean> {
+    return this.nameInput.evaluate((input) =>
+      (input as unknown as { checkValidity(): boolean }).checkValidity()
     );
+  }
+
+  async fillBio(bio: string) {
+    await this.bioInput.fill(bio);
+  }
+
+  async selectTimezone(timezone: string) {
+    await this.timezoneSelect.selectOption(timezone);
+  }
+
+  async save() {
+    const saved = this.profileSubmitted();
     await this.saveButton.click();
     await saved;
   }
 
-  // Добавление навыка — POST-форма Next.js. Без ожидания ответа два вызова
-  // подряд наезжают друг на друга: второй начинает заполнять поле, пока
-  // страница ещё перерисовывается после первого.
-  async addSkill(tag: string, type: string) {
-    const added = this.page.waitForResponse(
-      (response) =>
-        response.url().endsWith(ROUTES.profile) && response.request().method() === "POST"
-    );
+  async addSkill(tag: string, type: SkillType) {
+    await this.submitSkill(tag, type);
+    await this.skillChip(tag).first().waitFor({ state: "visible" });
+  }
+
+  async submitSkill(tag: string, type: SkillType) {
+    const submitted = this.profileSubmitted();
     await this.skillInput.fill(tag);
     await this.skillTypeSelect.selectOption(type);
     await this.addSkillButton.click();
-    await added;
+    await submitted;
+  }
+
+  async removeSkill(tag: string) {
+    const removed = this.profileSubmitted();
+    await this.skillRemoveButton(tag).first().click();
+    await removed;
+  }
+
+  private profileSubmitted() {
+    return this.page.waitForResponse(
+      (response) =>
+        response.url().endsWith(ROUTES.profile) && response.request().method() === "POST"
+    );
   }
 }

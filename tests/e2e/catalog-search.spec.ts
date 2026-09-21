@@ -4,11 +4,6 @@ import { ProfilePage } from "../pages/profile-page";
 import { SlotsPage } from "../pages/slots-page";
 import { BookingPage } from "../pages/booking-page";
 
-// Каталог PomidorQA отвечает на вопрос «кто может мне помочь и когда».
-// Оба сценария проверяют именно это: сколько времени у человека свободно
-// и с чем он готов помочь. Смотрим глазами гостя — свою карточку
-// авторизованный участник не видит.
-
 test.describe("Каталог: карточка участника", () => {
   const users = new UserPool();
 
