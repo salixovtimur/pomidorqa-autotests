@@ -1,8 +1,6 @@
 import { test, expect, request, type APIRequestContext } from "@playwright/test";
 import { startServer, type BookingStore } from "../../src/pyramid/mock-booking-api";
 
-// API-уровень пирамиды: проверяем бизнес-логику бронирования через HTTP-запросы,
-
 test.describe("API: бронирование слота PomidorQA", () => {
   let store: BookingStore;
   let api: APIRequestContext;
@@ -23,7 +21,9 @@ test.describe("API: бронирование слота PomidorQA", () => {
   test("бронирование свободного слота — 201, статус confirmed (сценарий 5)", async () => {
     const slot = store.createSlot("user-host", futureIso(60));
 
-    const response = await api.post("/bookings", { data: { slotId: slot.id, userId: "user-guest" } });
+    const response = await api.post("/bookings", {
+      data: { slotId: slot.id, userId: "user-guest" },
+    });
 
     expect(response.status()).toBe(201);
     const booking = await response.json();
@@ -35,7 +35,9 @@ test.describe("API: бронирование слота PomidorQA", () => {
   test("нельзя забронировать собственный слот — 409 cannot_book_own_slot", async () => {
     const slot = store.createSlot("user-owner", futureIso(60));
 
-    const response = await api.post("/bookings", { data: { slotId: slot.id, userId: "user-owner" } });
+    const response = await api.post("/bookings", {
+      data: { slotId: slot.id, userId: "user-owner" },
+    });
 
     expect(response.status()).toBe(409);
     expect((await response.json()).error).toBe("cannot_book_own_slot");
@@ -44,14 +46,18 @@ test.describe("API: бронирование слота PomidorQA", () => {
   test("нельзя забронировать слот с датой в прошлом — 409 slot_in_past (сценарий 7)", async () => {
     const slot = store.createSlot("user-host-2", pastIso(60));
 
-    const response = await api.post("/bookings", { data: { slotId: slot.id, userId: "user-guest-2" } });
+    const response = await api.post("/bookings", {
+      data: { slotId: slot.id, userId: "user-guest-2" },
+    });
 
     expect(response.status()).toBe(409);
     expect((await response.json()).error).toBe("slot_in_past");
   });
 
   test("бронирование несуществующего слота — 404 slot_not_found", async () => {
-    const response = await api.post("/bookings", { data: { slotId: "no-such-slot-id", userId: "user-guest-3" } });
+    const response = await api.post("/bookings", {
+      data: { slotId: "no-such-slot-id", userId: "user-guest-3" },
+    });
 
     expect(response.status()).toBe(404);
     expect((await response.json()).error).toBe("slot_not_found");
@@ -59,9 +65,13 @@ test.describe("API: бронирование слота PomidorQA", () => {
 
   test("повторное бронирование уже занятого слота — 409 slot_already_booked", async () => {
     const slot = store.createSlot("user-host-4", futureIso(60));
-    await api.post("/bookings", { data: { slotId: slot.id, userId: "user-guest-4a" } });
+    await api.post("/bookings", {
+      data: { slotId: slot.id, userId: "user-guest-4a" },
+    });
 
-    const response = await api.post("/bookings", { data: { slotId: slot.id, userId: "user-guest-4b" } });
+    const response = await api.post("/bookings", {
+      data: { slotId: slot.id, userId: "user-guest-4b" },
+    });
 
     expect(response.status()).toBe(409);
     expect((await response.json()).error).toBe("slot_already_booked");
@@ -71,8 +81,12 @@ test.describe("API: бронирование слота PomidorQA", () => {
     const slot = store.createSlot("user-host-3", futureIso(60));
 
     const [responseA, responseB] = await Promise.all([
-      api.post("/bookings", { data: { slotId: slot.id, userId: "user-guest-a" } }),
-      api.post("/bookings", { data: { slotId: slot.id, userId: "user-guest-b" } }),
+      api.post("/bookings", {
+        data: { slotId: slot.id, userId: "user-guest-a" },
+      }),
+      api.post("/bookings", {
+        data: { slotId: slot.id, userId: "user-guest-b" },
+      }),
     ]);
 
     const statuses = [responseA.status(), responseB.status()].sort();
@@ -103,7 +117,9 @@ test.describe("API: регистрация участника PomidorQA", () => 
   test("регистрация нового участника — 201, аккаунт создан с переданными данными", async () => {
     const email = `new-participant-${Date.now()}@example.com`;
 
-    const response = await api.post("/participants", { data: { name: "Новый Участник", email } });
+    const response = await api.post("/participants", {
+      data: { name: "Новый Участник", email },
+    });
 
     expect(response.status()).toBe(201);
     const participant = await response.json();
@@ -116,7 +132,9 @@ test.describe("API: регистрация участника PomidorQA", () => 
     const email = `duplicate-${Date.now()}@example.com`;
     await api.post("/participants", { data: { name: "Первый", email } });
 
-    const response = await api.post("/participants", { data: { name: "Второй", email } });
+    const response = await api.post("/participants", {
+      data: { name: "Второй", email },
+    });
 
     expect(response.status()).toBe(409);
     expect((await response.json()).error).toBe("email_taken");

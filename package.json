@@ -9,15 +9,20 @@
     "test:api": "playwright test --project=api",
     "test:e2e": "playwright test --project=e2e",
     "lint": "eslint tests",
+    "format": "prettier --check \"tests/**/*.ts\"",
     "report": "playwright show-report",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "metrics": "node scripts/test-metrics.mjs",
+    "test:hermetic": "playwright test --project=unit --project=api",
+    "gate": "npm run typecheck && npm run lint && npm run format && npm test && npm run metrics"
   },
   "devDependencies": {
     "@playwright/test": "^1.55.0",
     "@types/node": "^24.0.0",
     "eslint": "^10.8.1",
     "eslint-plugin-playwright": "^2.11.0",
-    "typescript-eslint": "^8.67.0",
-    "typescript": "^5.9.0"
+    "prettier": "^3.9.8",
+    "typescript": "^5.9.0",
+    "typescript-eslint": "^8.67.0"
   }
 }

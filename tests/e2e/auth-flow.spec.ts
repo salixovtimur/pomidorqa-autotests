@@ -1,18 +1,14 @@
 import { test, expect } from "@playwright/test";
 import { deleteUserAfterSignupForm, makeUser, ROUTES, UserPool } from "../helpers/user";
+import { DEFAULT_PROFILE_TIMEZONE } from "../helpers/slot-time";
 import { AuthPage } from "../pages/auth-page";
-
-// Единственный файл, где вход и регистрация — предмет проверки, а не
-// подготовка. Во всех остальных сценариях участник заводится через API,
-// поэтому саму форму, кроме этих тестов, не проверяет никто.
+import { ProfilePage } from "../pages/profile-page";
 
 const LOGIN_ERROR = "Неверный email или пароль";
 
 test.describe("Регистрация и вход", () => {
   const users = new UserPool();
   let auth: AuthPage;
-  // Заполнена ли форма регистрации и ждём ли мы отказа — от этого зависит,
-  // считать ли отсутствие сессии после теста нормой или потерянным участником.
   let signupSubmitted = false;
   let signupRejectionExpected = false;
 
@@ -30,39 +26,74 @@ test.describe("Регистрация и вход", () => {
     }
   });
 
-  test("форма регистрации пускает нового участника внутрь", async ({ page }) => {
+  test("форма регистрации заводит участника и создаёт ему профиль", async ({ page }) => {
     const user = makeUser("signup", Date.now());
+    const profile = new ProfilePage(page);
 
     await test.step("Открываем форму регистрации", async () => {
       await auth.openRegister();
     });
 
     await test.step("Заполняем имя, почту и пароль и отправляем", async () => {
-      // Отмечаем намерение до клика: если аккаунт создастся, а тест упадёт
-      // следующей строкой, уборка должна знать, что за ним идти.
       signupSubmitted = true;
       await auth.register(user.name, user.email, user.password);
     });
 
     await test.step("Участника пустило на главную PomidorQA", async () => {
-      // Редирект серверный, приходит мгновенно, но стенд общий и дважды за
-      // марафон отвечал дольше пяти секунд — держим небольшой запас.
-      await expect(page).toHaveURL(new RegExp(`${ROUTES.home}/?$`), { timeout: 10_000 });
+      await expect(page).toHaveURL(new RegExp(`${ROUTES.home}/?$`), {
+        timeout: 10_000,
+      });
     });
 
     await test.step("В шапке появилась кнопка «Выйти» — участник вошёл", async () => {
       await expect(auth.logoutButton).toBeVisible();
+    });
+
+    await test.step("В профиле стоит имя из формы регистрации", async () => {
+      await profile.open();
+      await expect(profile.nameInput).toHaveValue(user.name);
+    });
+
+    await test.step(`Часовой пояс по умолчанию — ${DEFAULT_PROFILE_TIMEZONE}`, async () => {
+      await expect(profile.timezoneSelect).toHaveValue(DEFAULT_PROFILE_TIMEZONE);
+    });
+  });
+
+  test("выход закрывает сессию, вход открывает её снова", async ({ browser, page }) => {
+    const runId = Date.now();
+
+    const existing = await test.step("Заводим участника через API", () =>
+      users.add(browser, "session", runId));
+
+    await test.step("Входим под этим участником через форму", async () => {
+      await auth.openLogin();
+      await auth.login(existing.user.email, existing.user.password);
+    });
+
+    await test.step("В шапке появилась кнопка «Выйти»", async () => {
+      await expect(auth.logoutButton).toBeVisible({ timeout: 10_000 });
+    });
+
+    await test.step("Участник выходит", async () => {
+      await auth.logout();
+    });
+
+    await test.step("В шапке снова ссылка «Войти»", async () => {
+      await expect(auth.loginLink).toBeVisible();
+      await expect(auth.logoutButton).toHaveCount(0);
+    });
+
+    await test.step("Приватная страница после выхода уводит на форму входа", async () => {
+      await page.goto(ROUTES.profile);
+      await expect(page).toHaveURL(new RegExp(`${ROUTES.login}$`));
     });
   });
 
   test("повторная регистрация с занятой почтой отклоняется", async ({ browser, page }) => {
     const runId = Date.now();
 
-    // Занятую почту готовим через API и в своём контексте: форма в этом тесте
-    // должна встретить уже существующего участника, а не создать его.
     const existing = await test.step("Заводим участника через API", () =>
-      users.add(browser, "taken", runId),
-    );
+      users.add(browser, "taken", runId));
 
     await test.step("Открываем форму регистрации в чистой сессии", async () => {
       await auth.openRegister();
@@ -85,19 +116,11 @@ test.describe("Регистрация и вход", () => {
     });
   });
 
-  test("неверный пароль и несуществующая почта дают одну и ту же ошибку", async ({
-    browser,
-  }) => {
+  test("неверный пароль и несуществующая почта дают одну и ту же ошибку", async ({ browser }) => {
     const runId = Date.now();
 
-    // По тексту ошибки нельзя понять, существует ли такая
-    // почта — иначе форма входа превращается в способ перебирать чужие адреса.
-    // Поэтому текст пришпилен дословно в обоих случаях: сравнения двух строк
-    // между собой мало, оно проходит и на сломанном входе, который всем
-    // отвечает одинаковым «что-то пошло не так».
     const existing = await test.step("Заводим участника через API", () =>
-      users.add(browser, "loginprobe", runId),
-    );
+      users.add(browser, "loginprobe", runId));
 
     await test.step("Входим с верной почтой, но неверным паролем", async () => {
       await auth.openLogin();

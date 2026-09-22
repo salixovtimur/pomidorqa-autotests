@@ -15,16 +15,19 @@ export class AuthPage {
     this.nameInput = page.getByLabel("Имя");
     this.emailInput = page.getByLabel("Email");
     this.passwordInput = page.getByLabel("Пароль");
-    this.registerButton = page.getByRole("button", { name: "Зарегистрироваться" });
+    this.registerButton = page.getByRole("button", {
+      name: "Зарегистрироваться",
+    });
     this.loginButton = page.getByRole("button", { name: "Войти" });
-    // Кнопка «Выйти» есть только у вошедшего, ссылка «Войти» — только у гостя.
-    // По ним и отличаем состояние, не гадая по URL.
     this.logoutButton = page.getByRole("button", { name: "Выйти" });
     this.loginLink = page.getByTestId("PomidorqaHeader-login-link");
-    // Скоуп на форму обязателен: замерил на стенде — до отправки на странице
-    // один элемент с ролью alert, после отправки два, и второй пустой и лежит
-    // вне формы. Без скоупа локатор упрётся в strict mode или возьмёт чужой.
     this.error = page.locator("form").getByRole("alert");
+  }
+
+  async isFieldValid(field: Locator): Promise<boolean> {
+    return field.evaluate((input) =>
+      (input as unknown as { checkValidity(): boolean }).checkValidity()
+    );
   }
 
   async openRegister() {
@@ -46,5 +49,15 @@ export class AuthPage {
     await this.emailInput.fill(email);
     await this.passwordInput.fill(password);
     await this.loginButton.click();
+  }
+
+  async logout() {
+    const pageUrl = this.page.url();
+    const loggedOut = this.page.waitForResponse(
+      (response) => response.url() === pageUrl && response.request().method() === "POST"
+    );
+    await this.logoutButton.click();
+    await loggedOut;
+    await this.page.waitForURL(new RegExp(`${ROUTES.home}/?$`));
   }
 }

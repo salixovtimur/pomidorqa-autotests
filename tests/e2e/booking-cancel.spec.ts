@@ -1,5 +1,6 @@
 import { test, expect } from "@playwright/test";
-import { dateInDays, ROUTES, UserPool, uniqueTag } from "../helpers/user";
+import { ROUTES, UserPool, uniqueTag } from "../helpers/user";
+import { tomorrowAt } from "../helpers/slot-time";
 import { ProfilePage } from "../pages/profile-page";
 import { SlotsPage } from "../pages/slots-page";
 import { BookingPage } from "../pages/booking-page";
@@ -12,14 +13,9 @@ test.describe("Бронирование: отмена встречи", () => {
   });
 
   test("отменённую гостем встречу видят обе стороны", async ({ browser }) => {
-    // В CI сценарий идёт 16.4 с, но внутри openFirstSlot сидит цикл против
-    // гонки гидратации с дедлайном 15 с. Легальный худший случай — 16.4 + 15 =
-    // 31 с, ровно за стандартными 30 из конфига. Зависание при этом ловят
-    // таймауты самих шагов, а не общий лимит.
-    test.setTimeout(60_000);
-
     const runId = Date.now();
     const skillTag = uniqueTag("Playwright-cancel", runId);
+    const slot = tomorrowAt("12:00");
 
     const [host, guest] =
       await test.step("Заводим через API хоста на его профиле и гостя в каталоге", async () => [
@@ -42,7 +38,7 @@ test.describe("Бронирование: отмена встречи", () => {
 
     await test.step("Хост выкладывает свободный слот на завтра", async () => {
       await hostSlots.open();
-      await hostSlots.addSlot(dateInDays(1), "12:00");
+      await hostSlots.addSlot(slot.date, slot.time);
     });
 
     await test.step("Слот появился в списке хоста", async () => {
@@ -50,7 +46,7 @@ test.describe("Бронирование: отмена встречи", () => {
     });
 
     await test.step("Гость находит хоста по навыку и бронирует его слот", async () => {
-      await guestBooking.searchBySkill(skillTag);
+      await guestBooking.findPerson(skillTag, host.user.name);
       await guestBooking.openPersonCard(host.user.name);
       await guestBooking.openFirstSlot();
       await guestBooking.confirmBooking();
@@ -77,8 +73,6 @@ test.describe("Бронирование: отмена встречи", () => {
     });
 
     await test.step("Карточка ушла из «Ближайших» в «Прошедшие и отменённые»", async () => {
-      // Сначала ждём положительный признак: пока страница не перерисовалась,
-      // toHaveCount(0) прошёл бы мгновенно и по неправильной причине.
       await expect(guestBooking.pastMeeting(host.user.name)).toContainText("отменено");
       await expect(guestBooking.upcomingMeeting(host.user.name)).toHaveCount(0);
     });
@@ -88,8 +82,6 @@ test.describe("Бронирование: отмена встречи", () => {
     });
 
     await test.step("После перезагрузки отмена никуда не делась", async () => {
-      // Сначала ждём положительный признак: пока страница не перерисовалась,
-      // toHaveCount(0) прошёл бы мгновенно и по неправильной причине.
       await expect(guestBooking.pastMeeting(host.user.name)).toContainText("отменено");
       await expect(guestBooking.upcomingMeeting(host.user.name)).toHaveCount(0);
     });
@@ -111,6 +103,76 @@ test.describe("Бронирование: отмена встречи", () => {
     await test.step("После перезагрузки хост видит встречу отменённой, с именем гостя", async () => {
       await expect(hostBooking.pastMeeting(guest.user.name)).toContainText("отменено");
       await expect(hostBooking.upcomingMeeting(guest.user.name)).toHaveCount(0);
+    });
+  });
+
+  test("хост отменяет встречу, и слот достаётся другому участнику", async ({ browser }) => {
+    const runId = Date.now();
+    const skillTag = uniqueTag("Hostcancel", runId);
+    const slot = tomorrowAt("13:30");
+
+    const [host, first, second] =
+      await test.step("Заводим через API хоста и двух гостей", async () => [
+        await users.add(browser, "hostcancel", runId, ROUTES.profile),
+        await users.add(browser, "firstguest", runId, ROUTES.home),
+        await users.add(browser, "secondguest", runId, ROUTES.home),
+      ]);
+
+    const hostProfile = new ProfilePage(host.page);
+    const hostSlots = new SlotsPage(host.page);
+    const hostBooking = new BookingPage(host.page);
+    const firstBooking = new BookingPage(first.page);
+    const secondBooking = new BookingPage(second.page);
+
+    await test.step("Хост объявляет навык и выкладывает слот", async () => {
+      await hostProfile.addSkill(skillTag, "can_help");
+      await hostSlots.open();
+      await hostSlots.addSlot(slot.date, slot.time);
+    });
+
+    await test.step("Первый гость бронирует слот", async () => {
+      await firstBooking.findPerson(skillTag, host.user.name);
+      await firstBooking.openPersonCard(host.user.name);
+      await firstBooking.openFirstSlot();
+      await firstBooking.confirmBooking();
+      await expect(firstBooking.confirmSuccess).toBeVisible({
+        timeout: 15_000,
+      });
+    });
+
+    await test.step("Хост видит встречу в «Ближайших» и отменяет её сам", async () => {
+      await hostBooking.openMyMeetings();
+      await expect(hostBooking.upcomingMeeting(first.user.name)).toBeVisible({
+        timeout: 15_000,
+      });
+      await hostBooking.cancelMeeting(first.user.name);
+    });
+
+    await test.step("Встреча отменена у хоста", async () => {
+      await expect(hostBooking.pastMeeting(first.user.name)).toContainText("отменено");
+      await expect(hostBooking.upcomingMeeting(first.user.name)).toHaveCount(0);
+    });
+
+    await test.step("Первый гость тоже видит отмену", async () => {
+      await firstBooking.openMyMeetings();
+      await expect(firstBooking.pastMeeting(host.user.name)).toContainText("отменено");
+    });
+
+    await test.step("Освободившийся слот бронирует второй гость", async () => {
+      await secondBooking.findPerson(skillTag, host.user.name);
+      await secondBooking.openPersonCard(host.user.name);
+      await secondBooking.openFirstSlot();
+      await secondBooking.confirmBooking();
+      await expect(secondBooking.confirmSuccess).toBeVisible({
+        timeout: 15_000,
+      });
+    });
+
+    await test.step("Встреча со вторым гостем появилась у хоста", async () => {
+      await hostBooking.openMyMeetings();
+      await expect(hostBooking.upcomingMeeting(second.user.name)).toBeVisible({
+        timeout: 15_000,
+      });
     });
   });
 });
