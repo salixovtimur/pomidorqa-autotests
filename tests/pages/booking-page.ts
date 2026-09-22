@@ -140,9 +140,20 @@ export class BookingPage {
   }
 
   async openSlotAt(time: string) {
-    await this.openDayWithSlots();
-    await this.calendarTime(time).click();
-    await this.confirmDialog.waitFor({ state: "visible" });
+    const deadline = Date.now() + 15_000;
+
+    for (;;) {
+      try {
+        await this.openDayWithSlots();
+        await this.calendarTime(time).click({ timeout: 5_000 });
+        await this.confirmDialog.waitFor({ state: "visible", timeout: 3_000 });
+        return;
+      } catch (error) {
+        if (Date.now() > deadline) {
+          throw error;
+        }
+      }
+    }
   }
 
   async confirmBooking() {
